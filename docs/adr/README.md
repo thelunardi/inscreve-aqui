@@ -11,3 +11,4 @@ Para criar um novo ADR, copie [`0000-template.md`](0000-template.md) com o próx
 | [0003](0003-unicidade-garantida-pelo-banco.md) | Unicidade e integridade garantidas pelo banco | Aceito |
 | [0004](0004-controle-de-vagas-update-atomico.md) | Controle de vagas por UPDATE atômico no PostgreSQL | Aceito |
 | [0005](0005-webhooks-persistidos-e-reconciliacao.md) | Webhooks persistidos e job de reconciliação de pagamentos | Aceito |
+| [0006](0006-linguagem-go.md) | Go como linguagem do backend | Aceito |
