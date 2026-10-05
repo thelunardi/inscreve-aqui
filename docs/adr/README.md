@@ -14,3 +14,4 @@ Para criar um novo ADR, copie [`0000-template.md`](0000-template.md) com o próx
 | [0006](0006-linguagem-go.md) | Go como linguagem do backend | Aceito |
 | [0007](0007-nomes-em-ingles.md) | Nomes em inglês no código e no banco de dados | Aceito |
 | [0008](0008-arquitetura-interna-dos-modulos.md) | Arquitetura interna dos módulos em camadas, com repositórios | Aceito |
+| [0009](0009-acesso-a-dados-sqlc-pgx.md) | Acesso a dados com sqlc e pgx | Aceito |
