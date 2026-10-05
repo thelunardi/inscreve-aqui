@@ -34,12 +34,14 @@ Resumo:
 - **ADR-0007:** código e banco em inglês; documentação e mensagens ao usuário em português. O glossário do ADR traduz os nomes em português dos ADRs 0001–0005.
 - **ADR-0008:** cada módulo em camadas (`domain`, `app`, `postgres`, `http`), com repositórios e transação explícita (Unit of Work).
 - **ADR-0009:** acesso a dados com `pgx/v5` e `sqlc`, isolado no adaptador `postgres` de cada módulo.
+- **ADR-0010:** migrations com `goose`, somente SQL, uma transação por migration, aplicadas por `cmd/migrate` antes do deploy.
 
 ## Stack
 
 - **Backend:** Go, PostgreSQL.
 - **Acesso a dados:** `pgx/v5` (`pgxpool`) e `sqlc`. Código gerado é versionado; rode `sqlc generate` ao alterar consultas.
-- **Ainda a decidir** (cada escolha deve virar um ADR antes de entrar no código): ferramenta de migrations, roteador HTTP, gateway de pagamento, frontend.
+- **Migrations:** `goose` (v3), arquivos `.sql` em `migrations/` embutidos no binário.
+- **Ainda a decidir** (cada escolha deve virar um ADR antes de entrar no código): roteador HTTP, gateway de pagamento, frontend.
 
 Ao precisar de uma dessas escolhas, apresente 2 ou 3 opções com prós e contras e espere a decisão. Prefira a biblioteca padrão quando ela resolver bem o problema.
 
@@ -51,6 +53,7 @@ Layout planejado (ajuste por ADR se mudar):
 cmd/
   api/            # servidor HTTP (composition root)
   worker/         # webhooks, reconciliação, expiração de pedidos, e-mails
+  migrate/        # aplica as migrations; roda no deploy, antes da API e do worker
 internal/
   events/
   orders/
@@ -64,7 +67,7 @@ internal/
   payments/
   notifications/
   platform/       # banco, Transactor, config, logging: infraestrutura compartilhada
-migrations/
+migrations/       # 00001_create_events.sql...; pacote Go com //go:embed *.sql
 docs/adr/
 ```
 
@@ -97,6 +100,7 @@ Nomes conforme o glossário do ADR-0007.
 
 ## Convenções
 
+- Migrations (ADR-0010): um arquivo por mudança com seções `-- +goose Up` e `-- +goose Down`, somente SQL, numeração sequencial. Nunca edite uma migration já commitada; crie uma nova. Em produção, corrija para a frente. Mantenha cada migration compatível com a versão da aplicação que ainda está no ar.
 - Valores monetários sempre em centavos, tipo inteiro (`int64`). Nunca `float`.
 - Datas e horas em `timestamptz`, armazenadas em UTC; conversão para o fuso do evento só na apresentação.
 - Código e banco em inglês (ADR-0007): pacotes, arquivos, tipos, funções, tabelas (no plural), colunas e status. Banco em `snake_case`. `cpf` e `pix` ficam como estão.
