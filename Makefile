@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: help db-up db-down db-reset migrate-up migrate-status migrate-down migration build vet test check
+.PHONY: help db-up db-down db-reset migrate-up migrate-status migrate-down migration fmt-check tidy-check build vet test test-race check
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*## ' Makefile | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
@@ -32,6 +32,12 @@ migration: ## Cria uma migration vazia: make migration name=create_x
 	printf -- "-- +goose Up\n\n-- +goose Down\n" > $$f; \
 	echo "criado $$f"
 
+fmt-check: ## Falha se algum arquivo não estiver formatado com gofmt
+	@out=$$(gofmt -l .); if [ -n "$$out" ]; then echo "arquivos sem gofmt:"; echo "$$out"; exit 1; fi
+
+tidy-check: ## Falha se go.mod ou go.sum precisarem de go mod tidy
+	go mod tidy -diff
+
 build: ## Compila todos os pacotes
 	go build ./...
 
@@ -41,4 +47,7 @@ vet: ## Roda o go vet
 test: ## Roda os testes (precisa do banco: make db-up)
 	go test ./...
 
-check: build vet test ## Build, vet e testes
+test-race: ## Roda os testes com o detector de condições de corrida
+	go test -race ./...
+
+check: fmt-check tidy-check build vet test ## Formatação, go.mod, build, vet e testes
