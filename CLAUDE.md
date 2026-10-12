@@ -35,6 +35,7 @@ Resumo:
 - **ADR-0008:** cada módulo em camadas (`domain`, `app`, `postgres`, `http`), com repositórios e transação explícita (Unit of Work).
 - **ADR-0009:** acesso a dados com `pgx/v5` e `sqlc`, isolado no adaptador `postgres` de cada módulo.
 - **ADR-0010:** migrations com `goose`, somente SQL, uma transação por migration, aplicadas por `cmd/migrate` antes do deploy.
+- **ADR-0011:** cada tabela tem um módulo dono; histórico de status em uma tabela por módulo; chaves estrangeiras entre módulos são permitidas.
 
 ## Stack
 
@@ -74,7 +75,7 @@ docs/adr/
 Regras dos módulos (ADR-0001 e ADR-0008):
 
 - Outros módulos só importam o pacote raiz (`internal/<module>`). O miolo fica em `internal/<module>/internal/`, que o compilador protege.
-- Um módulo nunca lê ou escreve diretamente as tabelas de outro módulo.
+- Um módulo nunca lê ou escreve diretamente as tabelas de outro módulo. O dono de cada tabela está no ADR-0011; para alterar dados de outro módulo (reservar vagas, enfileirar e-mail), chame a API pública dele passando a mesma `tx`.
 - Dependências entre módulos não podem ser circulares. Se surgir a necessidade, sinalize: provavelmente a fronteira está errada.
 - Dependências apontam para dentro: `domain` não importa nada de infraestrutura; `app` importa `domain` e declara interfaces; `postgres` e `http` as implementam ou usam. Só `postgres` e `platform` importam `pgx`.
 - SQL existe somente no pacote `postgres`. Os tipos gerados pelo sqlc não saem dele: o repositório os converte em entidades de domínio.
@@ -88,7 +89,7 @@ Regras dos módulos (ADR-0001 e ADR-0008):
 Nomes conforme o glossário do ADR-0007.
 
 1. **Listas operacionais** (largada, kits, camisetas, premiação) são sempre consultas sobre `registrations` com status `confirmed`. Nunca sobre pedidos, nunca de cópias ou caches.
-2. **Estados.** Pedido: `awaiting_payment` → `paid` | `expired`. Inscrição: `reserved` → `confirmed` | `canceled`. Pagamento: `pending` → `approved` | `rejected`. Toda transição grava uma linha em `status_history` com autor e data.
+2. **Estados.** Pedido: `awaiting_payment` → `paid` | `expired`. Inscrição: `reserved` → `confirmed` | `canceled`. Pagamento: `pending` → `approved` | `rejected`. Toda transição grava uma linha no histórico do próprio módulo (`order_status_history`, `registration_status_history`, `payment_status_history`) com autor e data.
 3. **Nada é apagado.** Pedidos expirados e inscrições canceladas permanecem no banco.
 4. **Nova tentativa de pagamento** cria um novo registro em `payments` ligado ao mesmo pedido, nunca um novo pedido.
 5. **`ConfirmPayment` é idempotente** e é o único caminho para confirmar um pedido. Webhook e reconciliação chamam a mesma função. Ela roda em uma transação: se o pedido já está `paid`, não faz nada.
