@@ -1,0 +1,72 @@
+# Roda as mesmas verificações do `make check`, mais o detector de corrida,
+# contra um PostgreSQL real (CLAUDE.md, seção Testes).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Um push novo no mesmo branch cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Usa exatamente o Go instalado abaixo; falha em vez de baixar outra versão
+  # se alguma dependência exigir um Go mais novo que o do go.mod.
+  GOTOOLCHAIN: local
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: inscreve
+          POSTGRES_PASSWORD: inscreve
+          POSTGRES_DB: inscreve
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U inscreve -d inscreve"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    env:
+      APP_ENV: ci
+      DATABASE_URL: postgres://inscreve:inscreve@localhost:5432/inscreve?sslmode=disable
+      TEST_DATABASE_URL: postgres://inscreve:inscreve@localhost:5432/postgres?sslmode=disable
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          # Mesma versão menor do go.mod, com o patch mais recente.
+          go-version: "1.25.x"
+
+      - name: Formatação (gofmt)
+        run: make fmt-check
+
+      - name: go.mod arrumado
+        run: make tidy-check
+
+      - name: Build
+        run: make build
+
+      - name: Vet
+        run: make vet
+
+      - name: Migrations aplicam no banco
+        run: make migrate-up
+
+      - name: Testes com detector de corrida
+        run: make test-race
