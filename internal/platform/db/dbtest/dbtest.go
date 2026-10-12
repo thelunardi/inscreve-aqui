@@ -1,26 +1,52 @@
 // Package dbtest cria bancos PostgreSQL isolados para testes.
 //
-// Cada chamada a New cria um banco novo no servidor de TEST_DATABASE_URL e o
-// apaga ao fim do teste, então testes podem rodar em paralelo sem interferir
-// uns nos outros.
+// Cada banco é criado no servidor de TEST_DATABASE_URL e apagado ao fim do
+// teste, então testes podem rodar em paralelo sem interferir uns nos outros.
 package dbtest
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net/url"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/thelunardi/inscreve-aqui/internal/platform/migrate"
 )
 
 // defaultURL aponta para o PostgreSQL do docker-compose.yml.
 const defaultURL = "postgres://inscreve:inscreve@localhost:5432/postgres?sslmode=disable"
 
-// New cria um banco vazio e devolve um pool conectado a ele.
+// New cria um banco com todas as migrations aplicadas e devolve um pool
+// conectado a ele.
 func New(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	dbURL := NewEmptyURL(t)
+
+	m, err := migrate.Open(dbURL)
+	if err != nil {
+		t.Fatalf("dbtest: open migrator: %v", err)
+	}
+	defer m.Close()
+	if _, err := m.Up(ctx); err != nil {
+		t.Fatalf("dbtest: apply migrations: %v", err)
+	}
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("dbtest: open pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// NewEmptyURL cria um banco vazio, sem migrations, e devolve a URL de conexão.
+func NewEmptyURL(t testing.TB) string {
 	t.Helper()
 	ctx := context.Background()
 
@@ -40,18 +66,9 @@ func New(t testing.TB) *pgxpool.Pool {
 		t.Fatalf("dbtest: create database: %v", err)
 	}
 
-	cfg, err := pgxpool.ParseConfig(serverURL)
-	if err != nil {
-		t.Fatalf("dbtest: parse url: %v", err)
-	}
-	cfg.ConnConfig.Database = name
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatalf("dbtest: open pool: %v", err)
-	}
-
+	// Registrado antes dos Cleanup de quem chama, então roda depois deles
+	// (Cleanup é LIFO): o banco só é apagado quando os pools já foram fechados.
 	t.Cleanup(func() {
-		pool.Close()
 		conn, err := pgx.Connect(ctx, serverURL)
 		if err != nil {
 			t.Errorf("dbtest: connect to drop database: %v", err)
@@ -62,7 +79,13 @@ func New(t testing.TB) *pgxpool.Pool {
 			t.Errorf("dbtest: drop database: %v", err)
 		}
 	})
-	return pool
+
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		t.Fatalf("dbtest: parse url: %v", err)
+	}
+	u.Path = "/" + name
+	return u.String()
 }
 
 func randomSuffix(t testing.TB) string {
